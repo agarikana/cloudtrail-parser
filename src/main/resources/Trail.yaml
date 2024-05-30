@@ -1,0 +1,20 @@
+Parameters:
+  TrailName:
+    Description: Name of the cloudtrail trail
+    Type: String
+  ObjectPrefix:
+    Description: Prefix of the cloudtrail logs path
+    Type: String
+    Default: "HeadBucket"
+Resources:
+  Trail:
+    Type: AWS::CloudTrail::Trail
+    Properties:
+      EventSelectors:
+        - ReadWriteType: All
+          IncludeManagementEvents: true
+      IsLogging: true
+      S3BucketName: !Sub cloudtrail-${AWS::Region}-handler-logs
+      S3KeyPrefix: !Ref ObjectPrefix
+      SnsTopicName: !ImportValue TrailTopicName
+      TrailName: !Ref TrailName

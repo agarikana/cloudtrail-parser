@@ -1,0 +1,166 @@
+Parameters:
+  TrailName:
+    Description: Name of the cloudtrail trail
+    Type: String
+  ObjectPrefix:
+    Description: Prefix of the cloudtrail logs path
+    Type: String
+    Default: "HeadBucket"
+  BucketName:
+    Description: Name of the cloudtrail logs bucket
+    Type: String
+    Default: ""
+
+Conditions:
+  ShouldCreateBucket:
+    !Not [!Equals [!Ref BucketName, ""]]
+
+Outputs:
+  CloudTrailNotificationMsgQueue:
+    Description: Url of the sqs queue subscribed for cloudtrail log notification msgs
+    Value: !Ref TrailQueue
+  HandlerInvocationRole:
+    Description: Role used to invoke the Legacy Handlers
+    Value: !GetAtt HandlerInvocationRole.Arn
+  TrailTopicName:
+    Description: Name of the sns topic which receives notifications
+    Value: !GetAtt TrailTopic.TopicName
+    Export:
+      Name: TrailTopicName
+
+Resources:
+  HandlerInvocationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: 'Role to invoke uluru handlers'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: UserAssumeRolePolicy
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: 'sts:AssumeRole'
+          - Sid: LambdaAssumeRolePolicy
+            Effect: Allow
+            Principal:
+              Service: 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+  HandlerInvocationRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: 'Admin'
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: '*'
+            Resource: '*'
+      Roles:
+        - !Ref HandlerInvocationRole
+
+  TrailTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !GetAtt TrailQueue.Arn
+          Protocol: sqs
+  TrailTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Id: MyPolicyDoc
+        Version: 2012-10-17
+        Statement:
+          - Sid: default-statement
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'SNS:GetTopicAttributes'
+              - 'SNS:SetTopicAttributes'
+              - 'SNS:Subscribe'
+              - 'SNS:AddPermission'
+              - 'SNS:RemovePermission'
+              - 'SNS:ListSubscriptionsByTopic'
+              - 'SNS:Publish'
+              - 'SNS:DeleteTopic'
+            Resource: !Ref TrailTopic
+            Condition:
+              StringEquals:
+                AWS:SourceOwner: !Ref AWS::AccountId
+          - Sid: cloudtrail-publish-policy
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action:
+              - 'SNS:Publish'
+            Resource: !Ref TrailTopic
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}
+      Topics:
+        - !Ref TrailTopic
+  TrailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      SqsManagedSseEnabled: false
+  TrailQueuePolicy:
+    Type: AWS::SQS::QueueInlinePolicy
+    Properties:
+      PolicyDocument:
+        Id: MyQueuePolicyDoc
+        Version: 2012-10-17
+        Statement:
+          - Sid: topic-sendmessage-policy
+            Effect: Allow
+            Principal:
+              Service: 'sns.amazonaws.com'
+            Action:
+              - 'SQS:SendMessage'
+            Resource: !GetAtt TrailQueue.Arn
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:${TrailTopic.TopicName}
+          - Sid: read-messages-policy
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action:
+              - 'SQS:*'
+            Resource: !GetAtt TrailQueue.Arn
+      Queue: !Ref TrailQueue
+
+  TrailBucket:
+    Type: AWS::S3::Bucket
+    Condition: ShouldCreateBucket
+    DeletionPolicy: Retain
+  TrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    DependsOn:
+      - 'TrailBucket'
+    Properties:
+      Bucket: !Sub cloudtrail-${AWS::Region}-handler-logs
+      PolicyDocument:
+        Id: TrailBucketPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: cloudtrail-getbucket-policy
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action:
+              - 's3:GetBucketAcl'
+            Resource: !Sub arn:${AWS::Partition}:s3:::cloudtrail-${AWS::Region}-handler-logs
+          - Sid: cloudtrail-putbucket-policy
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action:
+              - 's3:PutObject'
+            Resource: !Sub arn:${AWS::Partition}:s3:::cloudtrail-${AWS::Region}-handler-logs/${ObjectPrefix}/AWSLogs/${AWS::AccountId}/*
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}
+                s3:x-amz-acl: bucket-owner-full-control

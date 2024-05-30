@@ -1,4 +1,4 @@
-package org.example;
+package org.example.wrappers;
 
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
