@@ -9,6 +9,8 @@ Parameters:
 Resources:
   Trail:
     Type: AWS::CloudTrail::Trail
+    DependsOn:
+      - 'TrailBucketPolicy'
     Properties:
       EventSelectors:
         - ReadWriteType: All
@@ -18,3 +20,29 @@ Resources:
       S3KeyPrefix: !Ref ObjectPrefix
       SnsTopicName: !ImportValue TrailTopicName
       TrailName: !Ref TrailName
+  TrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Sub cloudtrail-${AWS::Region}-handler-logs
+      PolicyDocument:
+        Id: TrailBucketPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: cloudtrail-getbucket-policy
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action:
+              - 's3:GetBucketAcl'
+            Resource: !Sub arn:${AWS::Partition}:s3:::cloudtrail-${AWS::Region}-handler-logs
+          - Sid: cloudtrail-putbucket-policy
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action:
+              - 's3:PutObject'
+            Resource: !Sub arn:${AWS::Partition}:s3:::cloudtrail-${AWS::Region}-handler-logs/${ObjectPrefix}/AWSLogs/${AWS::AccountId}/*
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${TrailName}
+                s3:x-amz-acl: bucket-owner-full-control
