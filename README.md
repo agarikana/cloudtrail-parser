@@ -16,7 +16,7 @@ Example Output:-
 }
 ```
 # How to Run:
-1.Create an input dir structure like below that contains all the create/update stack templates(these should cover 100% of the properties of the resource).  
+1. Create an input dir structure like below that contains all the create/update stack templates(these should cover 100% of the properties of the resource).  
 These are usually the contract test inputs(converted to cfn templates)
 ```
 inputs
@@ -25,16 +25,9 @@ inputs
     └── update.json
 ...    
 ```
-
-2. Supply the region & input path arguments on commandline(TODO).  
-For now this needs to be hardcoded in the main class file `HandlerPermissionGetter` like below.  
-```
-Ex:-
-public static String REGION = "us-west-2";
-public static String PATH_TO_INPUTS = "/Users/alexark/inputs";
-```
-
-3. Run the cli.  
+2. Run the cli.  
 From the package root:  
 `mvn package`  
-`java -jar target/cloudtrail-event-parser-1.0-SNAPSHOT.jar`
+`java -jar target/handler-permission-getter.jar --region <region> --templates-root-dir <root path of the stack templates>`  
+Ex:-  
+`java -jar target/handler-permission-getter.jar -r us-east-1 --d /Users/alexark/inputs`

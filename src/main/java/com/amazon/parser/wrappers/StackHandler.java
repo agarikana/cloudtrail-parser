@@ -202,6 +202,7 @@ public class StackHandler {
                     .build();
             WaiterResponse<DescribeStacksResponse> waiterResponse = waiter.waitUntilStackDeleteComplete(describeStacksRequest);
             waiterResponse.matched().response().ifPresent(LOGGER::info);
+            LOGGER.info(String.format("stack %s: deleted", stackName));
         } catch (CloudFormationException | SdkClientException e) {
             LOGGER.error(e.getMessage());
             throw new RuntimeException(e);
