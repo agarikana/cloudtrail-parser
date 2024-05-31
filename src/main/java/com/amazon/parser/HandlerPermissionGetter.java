@@ -42,8 +42,8 @@ public class HandlerPermissionGetter {
     public static String CREATE_HANDLER_SESSION = "create-handler-session";
     public static String UPDATE_HANDLER_SESSION = "update-handler-session";
     public static String DELETE_HANDLER_SESSION = "delete-handler-session";
-    public static String REGION = "us-west-2";
-    public static String PATH_TO_INPUTS = "/Users/alexark/inputs";
+    public static String REGION = "us-west-2"; //TODO: read from command line
+    public static String PATH_TO_INPUTS = "/Users/alexark/inputs"; //TODO: read from command line
     public static String TRAIL_LOGS_BUCKET = String.format("cloudtrail-%s-handler-logs",REGION);
     public static String TRAIL_NAME = String.format("handler-api-trail-%s-%s",REGION, UUID.randomUUID());
     public static String SETUP_DEPENDENCIES_TEMPLATE_FILE_NAME = "TrailDependencies.yaml";

@@ -12,6 +12,6 @@
         <Logger name="software.amazon.awssdk" level="WARN" />
         <Logger name="software.amazon.awssdk.request" level="OFF" />
         <Logger name="org.apache.http.wire" level="OFF" />
-        <Logger name="org.example" level="ALL" />
+        <Logger name="org.amazon.parser" level="ALL" />
     </Loggers>
 </Configuration>
