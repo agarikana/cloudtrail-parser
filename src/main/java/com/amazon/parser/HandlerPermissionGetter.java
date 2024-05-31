@@ -5,6 +5,7 @@ import com.amazon.parser.wrappers.S3Handler;
 import com.amazon.parser.wrappers.SQSQueue;
 import com.amazon.parser.wrappers.StackHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.cli.*;
 import org.apache.log4j.Logger;
 import com.amazon.parser.data.CloudTrailEvent;
 import com.amazon.parser.data.Input;
@@ -38,19 +39,20 @@ import java.util.stream.Stream;
  */
 public class HandlerPermissionGetter {
 
+
+    public static String TRAIL_LOGS_BUCKET;
+    public static String TRAIL_NAME;
+    public static String TRAIL_DEPENDENCIES_STACK_NAME;
+    public static String TRAIL_STACK_NAME;
+    public static String HANDLER_STACK_NAME;
+
+    public static String DEFAULT_REGION = "us-east-1";
     public static String CLOUDTRAIL_LOGS_PREFIX = "HandlerInvocations";
     public static String CREATE_HANDLER_SESSION = "create-handler-session";
     public static String UPDATE_HANDLER_SESSION = "update-handler-session";
     public static String DELETE_HANDLER_SESSION = "delete-handler-session";
-    public static String REGION = "us-west-2"; //TODO: read from command line
-    public static String PATH_TO_INPUTS = "/Users/alexark/inputs"; //TODO: read from command line
-    public static String TRAIL_LOGS_BUCKET = String.format("cloudtrail-%s-handler-logs",REGION);
-    public static String TRAIL_NAME = String.format("handler-api-trail-%s-%s",REGION, UUID.randomUUID());
     public static String SETUP_DEPENDENCIES_TEMPLATE_FILE_NAME = "TrailDependencies.yaml";
     public static String SETUP_TEMPLATE_FILE_NAME = "Trail.yaml";
-    public static String TRAIL_DEPENDENCIES_STACK_NAME = String.format("ct-setup-%s-dependencies-stack", REGION);
-    public static String TRAIL_STACK_NAME = String.format("ct-setup-%s-stack", REGION);
-    public static String HANDLER_STACK_NAME = String.format("ct-create-handler-%s-stack", REGION);
     public static String SETUP_STACK_OUTPUTS_HANDLER_INVOCATION_ROLE = "HandlerInvocationRole";
     public static String SETUP_STACK_OUTPUTS_TRAIL_NOTIFICATION_QUEUE = "CloudTrailNotificationMsgQueue";
 
@@ -59,8 +61,46 @@ public class HandlerPermissionGetter {
 
     public static void main(String[] args) {
 
-        // init
         HandlerPermissionGetter handlerPermissionGetter = new HandlerPermissionGetter();
+
+        // get command line args
+        Options options = new Options();
+        HelpFormatter helpFormatter = new HelpFormatter();
+
+        final Option regionOption = Option.builder("r")
+                .hasArg(true)
+                .longOpt("region")
+                .argName("REGION")
+                .desc("aws region to invoke handlers. Ex: us-west-2")
+                .build();
+        final Option templateRootDir = Option.builder("d")
+                .hasArg(true)
+                .argName("TEMPLATE_ROOT_DIR")
+                .longOpt("templates-root-dir")
+                .required(true)
+                .desc("root directory containing the stack templates")
+                .build();
+        final Option help = Option.builder("h")
+                .hasArg(false)
+                .longOpt("help")
+                .desc("print this message")
+                .build();
+        options.addOption(regionOption);
+        options.addOption(templateRootDir);
+        options.addOption(help);
+
+        helpFormatter.printHelp("handler-permissions-getter", options, true);
+        Map<String, String> processedCommandLineArguments = handlerPermissionGetter.processCommandLineArgs(args, options, new DefaultParser());
+        final String REGION = processedCommandLineArguments.get("region");
+        final String PATH_TO_INPUTS = processedCommandLineArguments.get("templateRootDir");
+
+        // init
+        TRAIL_LOGS_BUCKET = String.format("cloudtrail-%s-handler-logs",REGION);
+        TRAIL_NAME = String.format("handler-api-trail-%s-%s",REGION, UUID.randomUUID());
+        TRAIL_DEPENDENCIES_STACK_NAME = String.format("ct-setup-%s-dependencies-stack", REGION);
+        TRAIL_STACK_NAME = String.format("ct-setup-%s-stack", REGION);
+        HANDLER_STACK_NAME = String.format("ct-create-handler-%s-stack", REGION);
+
         List<Input> inputs = handlerPermissionGetter.getInputs(PATH_TO_INPUTS);
         ClientFactory clientFactory = new ClientFactory();
         S3Handler s3Handler = new S3Handler((S3Client) clientFactory.getClient(Region.of(REGION), S3Client.builder()));
@@ -296,6 +336,21 @@ public class HandlerPermissionGetter {
     //TODO: load the properties from config
     private Properties loadConfig() {
         return new Properties();
+    }
+
+    private Map<String, String> processCommandLineArgs(String[] commandLineArgs, Options options, CommandLineParser parser) {
+        Map<String, String> processedCommandLineArgs = new HashMap<>();
+        try {
+            CommandLine commandLine = parser.parse(options, commandLineArgs);
+            if(!commandLine.hasOption("region")) {
+                LOGGER.info("'region' arg not specified, defaulting to " + DEFAULT_REGION);
+            }
+            processedCommandLineArgs.put("region", commandLine.getOptionValue("region", DEFAULT_REGION));
+            processedCommandLineArgs.put("templateRootDir", commandLine.getOptionValue("templates-root-dir"));
+        } catch (ParseException e) {
+            throw new IllegalArgumentException("Error parsing command line arguments: " + e);
+        }
+        return processedCommandLineArgs;
     }
 
 }
