@@ -4,7 +4,7 @@ import com.amazon.parser.data.CloudTrailLog;
 import com.amazon.parser.data.Notification;
 import com.amazon.parser.deserializers.DeSerializer;
 import com.amazon.parser.factories.ClientFactory;
-import com.amazon.parser.interfaces.EventSource;
+import com.amazon.parser.EventSource;
 import lombok.Data;
 import org.apache.log4j.Logger;
 import com.amazon.parser.data.CloudTrailEvent;
@@ -42,45 +42,42 @@ public class NotificationProcessor {
             String notificationMessageBody = notificationObj.getMessage();
             switch(notificationObj.getNotificationType()){
                 case BUCKETLOGSREADY:
-                    eventSources.add(new EventSource() {
-                        @Override
-                        public List<CloudTrailEvent> readEvents() {
-                            List<CloudTrailEvent> cloudTrailEvents = new ArrayList<>();
-                            try {
-                                S3Client client = (S3Client) clientFactory.getClient(Region.of(region), S3Client.builder());
-                                S3NotificationMessage s3NotificationMessage = s3NotificationMessageDeSerializer.deserializeToObject(
-                                        notificationMessageBody,
-                                        S3NotificationMessage.class
-                                );
-                                String bucket = s3NotificationMessage.getBucket();
-                                List<String> logFiles = s3NotificationMessage.getObjects();
+                    eventSources.add(() -> {
+                        List<CloudTrailEvent> cloudTrailEvents = new ArrayList<>();
+                        try {
+                            S3Client client = (S3Client) clientFactory.getClient(Region.of(region), S3Client.builder());
+                            S3NotificationMessage s3NotificationMessage = s3NotificationMessageDeSerializer.deserializeToObject(
+                                    notificationMessageBody,
+                                    S3NotificationMessage.class
+                            );
+                            String bucket = s3NotificationMessage.getBucket();
+                            List<String> logFiles = s3NotificationMessage.getObjects();
 
-                                for(String logFile : logFiles){
-                                    ResponseInputStream<GetObjectResponse> objectInputStream = client.getObject(GetObjectRequest.builder()
-                                                    .bucket(bucket)
-                                                    .key(logFile)
-                                            .build());
-                                    try(InputStreamReader streamReader = new InputStreamReader(new GZIPInputStream(objectInputStream));
-                                        BufferedReader bufferedReader = new BufferedReader(streamReader)) {
-                                        String line;
-                                        StringJoiner cloudTrailEventsJson = new StringJoiner("\n");
-                                        while ((line = bufferedReader.readLine()) != null) {
-                                            cloudTrailEventsJson.add(line);
-                                        }
-                                        cloudTrailEvents.addAll(cloudTrailLogDeSerializer
-                                                .deserializeToObject(cloudTrailEventsJson.toString(), CloudTrailLog.class)
-                                                .getCloudTrailsEvents()
-                                        );
-
-                                    } catch (IOException e) {
-                                        LOGGER.error(e);
+                            for(String logFile : logFiles){
+                                ResponseInputStream<GetObjectResponse> objectInputStream = client.getObject(GetObjectRequest.builder()
+                                                .bucket(bucket)
+                                                .key(logFile)
+                                        .build());
+                                try(InputStreamReader streamReader = new InputStreamReader(new GZIPInputStream(objectInputStream));
+                                    BufferedReader bufferedReader = new BufferedReader(streamReader)) {
+                                    String line;
+                                    StringJoiner cloudTrailEventsJson = new StringJoiner("\n");
+                                    while ((line = bufferedReader.readLine()) != null) {
+                                        cloudTrailEventsJson.add(line);
                                     }
+                                    cloudTrailEvents.addAll(cloudTrailLogDeSerializer
+                                            .deserializeToObject(cloudTrailEventsJson.toString(), CloudTrailLog.class)
+                                            .getCloudTrailsEvents()
+                                    );
+
+                                } catch (IOException e) {
+                                    LOGGER.error(e);
                                 }
-                            } catch (AwsServiceException e) {
-                                LOGGER.error(e);
                             }
-                            return cloudTrailEvents;
+                        } catch (AwsServiceException e) {
+                            LOGGER.error(e);
                         }
+                        return cloudTrailEvents;
                     });
                     break;
                 case OTHER:

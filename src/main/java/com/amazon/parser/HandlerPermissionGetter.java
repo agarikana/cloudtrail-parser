@@ -1,6 +1,6 @@
 package com.amazon.parser;
 
-import com.amazon.parser.wrappers.CloudTrail;
+import com.amazon.parser.wrappers.CloudTrailHandler;
 import com.amazon.parser.wrappers.S3Handler;
 import com.amazon.parser.wrappers.SQSQueue;
 import com.amazon.parser.wrappers.StackHandler;
@@ -12,12 +12,6 @@ import com.amazon.parser.data.Input;
 import com.amazon.parser.factories.ClientFactory;
 import com.amazon.parser.processors.NotificationProcessor;
 import com.amazon.parser.processors.QueueProcessor;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import software.amazon.awssdk.http.apache.ApacheHttpClient;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.cloudtrail.CloudTrailClient;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.sqs.SqsClient;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -103,8 +97,8 @@ public class HandlerPermissionGetter {
 
         List<Input> inputs = handlerPermissionGetter.getInputs(PATH_TO_INPUTS);
         ClientFactory clientFactory = new ClientFactory();
-        S3Handler s3Handler = new S3Handler((S3Client) clientFactory.getClient(Region.of(REGION), S3Client.builder()));
-        StackHandler setUpStackHandler = new StackHandler(REGION, null);
+        S3Handler s3Handler = new S3Handler(clientFactory, REGION);
+        StackHandler setUpStackHandler = new StackHandler(clientFactory, REGION);
 
         List<String> stackOutputNames = List.of(
                 SETUP_STACK_OUTPUTS_HANDLER_INVOCATION_ROLE,
@@ -118,34 +112,16 @@ public class HandlerPermissionGetter {
                     stackOutputNames);
             LOGGER.info("Trail InfraStructure Stack created");
 
-            try(CloudTrailClient cloudTrailClient = CloudTrailClient.builder()
-                    .httpClient(ApacheHttpClient.builder().build())
-                    .region(Region.of(REGION))
-                    .build();){
-                CloudTrail handlerInvocationTrail = CloudTrail.builder(
-                        TRAIL_NAME, cloudTrailClient)
-                        .build();
+            try {
+                CloudTrailHandler cloudTrailHandler = new CloudTrailHandler(clientFactory, REGION);
 
                 //invoke legacy handlers
-                StackHandler resourceCreateStackHandler = new StackHandler(
-                        REGION,
-                        null,
-                        setUpStackOutputs.get(SETUP_STACK_OUTPUTS_HANDLER_INVOCATION_ROLE),
-                        CREATE_HANDLER_SESSION
-                );
-                StackHandler resourceUpdateStackHandler = new StackHandler(
-                        REGION,
-                        null,
-                        setUpStackOutputs.get(SETUP_STACK_OUTPUTS_HANDLER_INVOCATION_ROLE),
-                        UPDATE_HANDLER_SESSION
-                );
-                StackHandler resourceDeleteStackHandler = new StackHandler(
-                        REGION,
-                        null,
-                        setUpStackOutputs.get(SETUP_STACK_OUTPUTS_HANDLER_INVOCATION_ROLE),
-                        DELETE_HANDLER_SESSION
-                );
-
+                StackHandler resourceCreateStackHandler = new StackHandler(clientFactory, REGION,
+                        setUpStackOutputs.get(SETUP_STACK_OUTPUTS_HANDLER_INVOCATION_ROLE), CREATE_HANDLER_SESSION);
+                StackHandler resourceUpdateStackHandler = new StackHandler(clientFactory, REGION,
+                        setUpStackOutputs.get(SETUP_STACK_OUTPUTS_HANDLER_INVOCATION_ROLE), UPDATE_HANDLER_SESSION);
+                StackHandler resourceDeleteStackHandler = new StackHandler(clientFactory, REGION,
+                        setUpStackOutputs.get(SETUP_STACK_OUTPUTS_HANDLER_INVOCATION_ROLE), DELETE_HANDLER_SESSION);
 
                 // start trail
                 LOGGER.info("Waiting for 6 minutes before invoking handlers");
@@ -159,15 +135,11 @@ public class HandlerPermissionGetter {
 
                 // poll for cloudtrail notification messages
                 SQSQueue sqsQueue = new SQSQueue(
-                        SqsClient.builder()
-                                .httpClient(ApacheHttpClient.builder().build())
-                                .region(Region.of(REGION))
-                                .credentialsProvider(DefaultCredentialsProvider.builder().build())
-                                .build(),
+                        clientFactory,
+                        REGION,
                         setUpStackOutputs.get(SETUP_STACK_OUTPUTS_TRAIL_NOTIFICATION_QUEUE));
                 QueueConsumer sqsQueueConsumer = new QueueConsumer(
                         sqsQueue, 20);
-                //Map<String, String> notificationMessages = SQSQueuePoller(sqsQueueConsumer);
                 QueueProcessor queueProcessor = new QueueProcessor(1, Duration.ofMinutes(1));
                 Map<String, String> notificationMessages = queueProcessor.process(sqsQueueConsumer, Duration.ofMinutes(6));
 
@@ -182,7 +154,7 @@ public class HandlerPermissionGetter {
                 notificationProcessor.getEventSources().forEach(eventSource -> cloudTrailEvents.addAll(eventSource.readEvents()));
 
                 // stop the trail
-                handlerInvocationTrail.stop();
+                cloudTrailHandler.stop(TRAIL_NAME);
 
                 // extract handlers' invocation events
                 ObjectMapper objectMapper = new ObjectMapper();

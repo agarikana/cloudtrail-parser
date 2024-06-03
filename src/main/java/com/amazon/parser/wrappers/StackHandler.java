@@ -1,5 +1,7 @@
 package com.amazon.parser.wrappers;
 
+import com.amazon.parser.factories.ClientFactory;
+import lombok.NonNull;
 import org.apache.log4j.Logger;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
@@ -31,41 +33,18 @@ public class StackHandler {
     private final CloudFormationClient client;
     private final CloudFormationWaiter waiter;
     private static final Logger LOGGER = Logger.getLogger(StackHandler.class);
-    public StackHandler(String region, String endpoint, String assumeRoleArn, String sessionName) {
-        assert region != null || endpoint != null;
-        AwsCredentialsProvider awsCredentialsProvider;
-        if(assumeRoleArn != null) {
-            AssumeRoleRequest req = AssumeRoleRequest.builder()
-                    .roleArn(assumeRoleArn)
-                    .roleSessionName(sessionName)
-                    .build();
 
-            awsCredentialsProvider = StsAssumeRoleCredentialsProvider.builder()
-                    .refreshRequest(req)
-                    .stsClient(StsClient.builder()
-                            .httpClient(ApacheHttpClient.builder().build())
-                            .region(region != null? Region.of(region): Region.AWS_GLOBAL).build())
-                    .build();
+    public StackHandler(@NonNull final ClientFactory clientFactory, @NonNull final String region, final String assumeRoleArn, final String sessionName) {
+        if(assumeRoleArn == null && sessionName == null) {
+            this.client = (CloudFormationClient) clientFactory.getClient(Region.of(region), CloudFormationClient.builder());
         } else {
-            awsCredentialsProvider = DefaultCredentialsProvider.builder().build();
+            this.client = (CloudFormationClient) clientFactory.getClientWithAssumedRole(Region.of(region), assumeRoleArn, sessionName, CloudFormationClient.builder());
         }
-
-        CloudFormationClientBuilder cfnBuilder = CloudFormationClient.builder();
-        if(region != null) {
-            cfnBuilder.region(Region.of(region));
-        }
-        if(endpoint != null) {
-            cfnBuilder.endpointOverride(URI.create(endpoint));
-        }
-        this.client = cfnBuilder
-                .httpClient(ApacheHttpClient.builder().build())
-                .credentialsProvider(awsCredentialsProvider)
-                .build();
         this.waiter = client.waiter();
-
     }
-    public StackHandler(String region, String endpoint) {
-        this(region, endpoint, null, null);
+
+    public StackHandler(@NonNull final ClientFactory clientFactory, @NonNull final String region) {
+        this(clientFactory, region, null, null);
     }
 
     public void createStack(String stackName, String stackTemplate, Map<String, String> parameters) {

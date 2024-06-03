@@ -1,4 +1,4 @@
-package com.amazon.parser.interfaces;
+package com.amazon.parser;
 
 import com.amazon.parser.data.CloudTrailEvent;
 

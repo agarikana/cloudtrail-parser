@@ -1,7 +1,9 @@
 package com.amazon.parser.wrappers;
 
+import com.amazon.parser.factories.ClientFactory;
 import lombok.Data;
 import lombok.Getter;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
@@ -16,8 +18,8 @@ public class SQSQueue {
     @Getter
     private final String queueUrl;
 
-    public SQSQueue(SqsClient client, String queueUrl) {
-        this.client = client;
+    public SQSQueue(ClientFactory clientFactory, String region, String queueUrl) {
+        this.client = (SqsClient) clientFactory.getClient(Region.of(region), SqsClient.builder());
         this.queueUrl = queueUrl;
     }
 

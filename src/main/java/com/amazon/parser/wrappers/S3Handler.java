@@ -1,5 +1,6 @@
 package com.amazon.parser.wrappers;
 
+import com.amazon.parser.factories.ClientFactory;
 import lombok.NonNull;
 import org.apache.log4j.Logger;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
@@ -15,16 +16,9 @@ public class S3Handler {
     private static final Logger LOGGER = Logger.getLogger(S3Handler.class);
     private static final String NO_SUCH_BUCKET_MSG = "Bucket %s does not exist. Ignoring";
     private final S3Client s3Client;
-    public S3Handler(S3Client s3Client) {
-        this.s3Client = s3Client;
-    }
-    public S3Handler(String region, AwsCredentialsProvider awsCredentialsProvider) {
-        assert region != null && awsCredentialsProvider != null;
-        this.s3Client = S3Client.builder()
-                        .httpClient(ApacheHttpClient.builder().build())
-                .region(Region.of(region))
-                .credentialsProvider(awsCredentialsProvider)
-                .build();
+
+    public S3Handler(ClientFactory clientFactory, String region) {
+        this.s3Client = (S3Client) clientFactory.getClient(Region.of(region), S3Client.builder());
     }
 
     /**
@@ -66,6 +60,7 @@ public class S3Handler {
 
     public boolean doesBucketExist(@NonNull String bucketName) {
         try {
+
             this.s3Client.headBucket(HeadBucketRequest.builder()
                     .bucket(bucketName)
                     .build());
