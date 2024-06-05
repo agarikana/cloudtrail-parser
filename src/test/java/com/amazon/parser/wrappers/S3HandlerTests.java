@@ -16,7 +16,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class S3HandlerTests {
+public class S3HandlerTests {
 
     @Mock
     ClientFactory clientFactory;

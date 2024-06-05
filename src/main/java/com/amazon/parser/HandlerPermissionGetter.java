@@ -171,12 +171,12 @@ public class HandlerPermissionGetter {
         }
     }
 
-    private Map<String, List<String>> extractHandlerEvents(final List<CloudTrailEvent> cloudTrailEvents) {
-        Map<String, List<String>> handlerEvents = new HashMap<>();
+    private Map<String, Set<String>> extractHandlerEvents(final List<CloudTrailEvent> cloudTrailEvents) {
+        Map<String, Set<String>> handlerEvents = new HashMap<>();
         try {
-            handlerEvents.put("create-handler-events", new ArrayList<>());
-            handlerEvents.put("update-handler-events", new ArrayList<>());
-            handlerEvents.put("delete-handler-events", new ArrayList<>());
+            handlerEvents.put("create-handler-events", new HashSet<>());
+            handlerEvents.put("update-handler-events", new HashSet<>());
+            handlerEvents.put("delete-handler-events", new HashSet<>());
             cloudTrailEvents.forEach( event -> {
                 if(event.isCreatedWithSession(CREATE_HANDLER_SESSION) &&
                         !event.isEventSource("cloudformation.amazonaws.com"))

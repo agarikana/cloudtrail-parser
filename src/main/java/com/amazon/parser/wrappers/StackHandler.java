@@ -7,6 +7,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.core.waiters.WaiterOverrideConfiguration;
 import software.amazon.awssdk.core.waiters.WaiterResponse;
 import software.amazon.awssdk.http.apache.ApacheHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -68,7 +69,7 @@ public class StackHandler {
             DescribeStacksRequest describeStacksRequest = DescribeStacksRequest.builder()
                     .stackName(stackName)
                     .build();
-
+            // Wait until terminal state is reached. No timeout
             WaiterResponse<DescribeStacksResponse> waiterResponse = waiter.waitUntilStackCreateComplete(describeStacksRequest);
             waiterResponse.matched().response().ifPresent(LOGGER::info);
             waiterResponse.matched().exception().ifPresent( exp -> {
@@ -157,12 +158,12 @@ public class StackHandler {
             DescribeStacksRequest describeStacksRequest = DescribeStacksRequest.builder()
                     .stackName(stackName)
                     .build();
-
+            // Wait until terminal state is reached. No timeout
             WaiterResponse<DescribeStacksResponse> waiterResponse = waiter.waitUntilStackUpdateComplete(describeStacksRequest);
             waiterResponse.matched().response().ifPresent(LOGGER::info);
             waiterResponse.matched().exception().ifPresent( exp -> {
                 LOGGER.error(exp);
-                System.exit(1);
+                throw new RuntimeException(exp);
             });
         } catch (AwsServiceException | SdkClientException e) {
             LOGGER.error(String.format("stack update failed for stack %s: received exception %s:",stackName, e.getMessage()));
@@ -181,7 +182,16 @@ public class StackHandler {
                     .build();
             WaiterResponse<DescribeStacksResponse> waiterResponse = waiter.waitUntilStackDeleteComplete(describeStacksRequest);
             waiterResponse.matched().response().ifPresent(LOGGER::info);
-            LOGGER.info(String.format("stack %s: deleted", stackName));
+            waiterResponse.matched().exception().ifPresent( exp -> {
+                if(exp instanceof CloudFormationException cloudFormationException){
+                    if(cloudFormationException.statusCode() == 400){
+                        LOGGER.info(String.format("stack %s: deleted", stackName));
+                        return;
+                    }
+                }
+                LOGGER.error(exp);
+                throw new RuntimeException(exp);
+            });
         } catch (CloudFormationException | SdkClientException e) {
             LOGGER.error(e.getMessage());
             throw new RuntimeException(e);
